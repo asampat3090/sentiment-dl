@@ -1,23 +1,26 @@
 import cPickle
 import gzip
 import os
+import sys
+import re
 
 import numpy
 import theano
 
 import pandas
 from sklearn.feature_extraction.text import CountVectorizer
+import pdb
 
+# def build_from_csv(csv_path):
+#     """
+#     Builds the pkl file from csv_path
 
-def build_from_csv(csv_path):
-    """
-    Builds the pkl file from csv_path
+#     CSV format:
+#     sentence, label
+#     """
+#     with open(csv_path, 'rb'):
 
-    CSV format:
-    sentence, label
-    """
-    with open(csv_path, 'rb'):
-
+datapath = os.path.join(os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..'),'data'),'my_data')
 
 def prepare_data(seqs, labels, maxlen=None):
     """
@@ -62,53 +65,97 @@ def prepare_data(seqs, labels, maxlen=None):
     return x, x_mask, labels
 
 
-def get_dataset_file(csv_path, default_dataset, origin):
+def split_sentence(sent):
+    """
+    Splits sentence into words and punctuations
+    """
+    return re.findall(r"[\w']+|[.,!?;]", sent)
+
+def check_dir_files(dataset_path):
+    """
+    Check if directory exists or train.txt + test.txt files present
+    """
+    # check if the directory is present
+    if not os.path.exists(dataset_path):
+        print "The dataset path does not exist"
+        sys.exit(1)
+    # check if all files are available
+    filenames = ['train.txt', 'test.txt']
+    filepaths = []
+    for f in filenames:
+        filepath = os.path.join(dataset_path,f)
+        if not os.path.isfile(filepath):
+            print "%s does not exist in the dataset path given" % f
+            sys.exit(1)
+        filepaths.append(filepath)
+    return filepaths
+
+def build_dict(dataset_path):
+    """
+    If 'dictionary.pkl' not present,
+    Build and return dictionary with all words + indices
+    else,
+    Return dictionary from 'dictionary.pkl'
+    """
+    dict_path = os.path.join(dataset_path, 'dictionary.pkl')
+    filepaths = check_dir_files(dataset_path)
+    if os.path.isfile(dict_path):
+        dictionary = cPickle.load(dict_path)
+        return dictionary
+
+    print "dictionary.pkl file not found - building dictionary..."
+    all_sents = []
+    for f in filepaths:
+        df = pandas.read_csv(f)
+        sentences = list(df.ix[:,0])
+        all_sents = all_sents + sentences
+
+    vectorizer = CountVectorizer().fit(all_sents)
+    dictionary = vectorizer.vocabulary_
+    dictionary_series = pandas.Series(dictionary.values(), index=dictionary.keys()) + 2
+    dictionary_series.sort(axis=1, ascending=False)
+    dictionary = list(dictionary_series.index)
+
+    # write dictionary to pkl file
+    dictionary_path = os.path.join(dataset_path, 'dictionary.pkl')
+    cPickle.dump(dictionary, open(dictionary_path, 'wb'))
+
+    # return dictionary
+    return dictionary
+
+def get_dataset_file(csv_path_dir):
     """
     Build the proper dataset pkl file from CSV
 
     csv format:
     sentence, label
     """
-    data_dir, data_file = os.path.split(csv_path)
-    if data_dir == "" and not os.path.isfile(csv_path):
-        # Check if dataset is in the data directory.
-        new_path = os.path.join(
-            os.path.split(__file__)[0],
-            "..",
-            "data",
-            csv_path
-        )
-        if os.path.isfile(new_path) or data_file == default_dataset:
-            dataset = new_path
+    filepaths = check_dir_files(csv_path_dir)
 
-    # Read csv and write to pkl file
-    df = pandas.read_csv(csv_path, sep=',')
-    sentences = list(df['sentence'])
-    labels = list(df['label'])
+    dictionary = build_dict(csv_path_dir)
+    result = []
+    for fidx, f in enumerate(filepaths):
+        # Read csv and write to pkl file
+        df = pandas.read_csv(f, sep=',')
+        sentences = list(df['sentence'])
+        labels = list(df['label'])
+        for idx, sent in enumerate(sentences):
+            sent_vect = []
+            for wrd in split_sentence(sent):
+                sent_vect.append(dictionary.index(wrd))
+            sentences[idx] = sent_vect
 
-    # Convert sentences to lists of word indices
-    # build dictionary
-    vectorizer = CountVectorizer().fit(sentences)
-    dictionary = vectorizer.vocabulary_
-    dictionary_series = pandas.Series(dictionary.values(), index=dictionary.keys()) + 2
-    dictionary_series.sort(axis=1, ascending=False)
-    sorted_wordlist = list(dictionary_series.index)
+        result.append((sentences, labels))
 
-    for idx, sent in enumerate(sentences):
-    sent_vect = []
-    for wrd in sent.split(' '):
-        sent_vect.append(sorted_wordlist.index[wrd])
-    sentences[idx] = sent_vec
-
-    output_path = 'my_data.pkl'
+    output_path = os.path.join(csv_path_dir, 'my_data.pkl')
     output_file = open(output_path, 'wb')
-    cPickle.dump(sentences, output_file)
-    cPickle.dump(labels, output_file)
+    for r in result:
+        cPickle.dump(r, output_file)
 
     return output_path
 
 
-def load_data(path="my_data.pkl", n_words=100000, valid_portion=0.1, maxlen=None,
+def load_data(path=os.path.join(datapath, 'my_data.pkl'), n_words=100000, valid_portion=0.1, maxlen=None,
               sort_by_len=True):
     '''
     Loads the dataset
@@ -137,7 +184,9 @@ def load_data(path="my_data.pkl", n_words=100000, valid_portion=0.1, maxlen=None
 
     # raise File not found error if not present
     if not os.path.isfile(path):
-        raise IOError('File not found')
+        # build the .pkl file from the csv file
+        data_dir, data_file = os.path.split(path)
+        get_dataset_file(data_dir)
 
     if path.endswith(".gz"):
         f = gzip.open(path, 'rb')

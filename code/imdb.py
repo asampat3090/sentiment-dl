@@ -5,6 +5,7 @@ import os
 import numpy
 import theano
 
+datapath = os.path.join(os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..'),'data'),'imdb')
 
 def prepare_data(seqs, labels, maxlen=None):
     """Create the matrices from the datasets.
@@ -74,7 +75,7 @@ def get_dataset_file(dataset, default_dataset, origin):
     return dataset
 
 
-def load_data(path="imdb.pkl", n_words=100000, valid_portion=0.1, maxlen=None,
+def load_data(path=os.path.join(datapath,"imdb.pkl"), n_words=100000, valid_portion=0.1, maxlen=None,
               sort_by_len=True):
     '''Loads the dataset
 

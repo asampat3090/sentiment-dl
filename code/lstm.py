@@ -13,9 +13,11 @@ import theano.tensor as tensor
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 import imdb
+import my_data
 import pdb
 
-datasets = {'imdb': (imdb.load_data, imdb.prepare_data)}
+datasets = {'imdb': (imdb.load_data, imdb.prepare_data),
+            'my_data': (my_data.load_data, my_data.prepare_data)}
 
 # Set the random number generators' seeds for consistency
 SEED = 123
@@ -639,7 +641,7 @@ def test_lstm(
     model_options = locals().copy()
     print "model options", model_options
 
-    load_data, prepare_data = get_dataset('imdb')
+    load_data, prepare_data = get_dataset(dataset)
 
     print 'Loading data'
     train, valid, test = load_data(n_words=n_words, valid_portion=0.05,
@@ -669,7 +671,6 @@ def test_lstm(
     best_p = unzip(tparams)
 
     use_noise.set_value(0.)
-    pdb.set_trace()
     train_err = pred_error(f_pred, prepare_data, train, kf_train_sorted)
     valid_err = pred_error(f_pred, prepare_data, valid, kf_valid)
     test_err = pred_error(f_pred, prepare_data, test, kf_test)
@@ -690,4 +691,4 @@ if __name__ == '__main__':
     #     test_size=500,
     # )
     # test the model
-    test_lstm()
+    test_lstm(dataset='my_data')
